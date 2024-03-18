@@ -107,14 +107,13 @@ class DeepSort(object):
 
                 self.embedder = Embedder(
                     half=half,
-                    max_batch_size=16,
+                    max_batch_size=30,
                     bgr=bgr,
                     gpu=embedder_gpu,
                     model_wts_path=embedder_wts,
                 )
             elif embedder == 'torchreid':
                 from deep_sort_realtime.embedder.embedder_pytorch import TorchReID_Embedder as Embedder
-
                 self.embedder = Embedder(
                     bgr=bgr, 
                     gpu=embedder_gpu,
@@ -179,7 +178,9 @@ class DeepSort(object):
         list of track objects (Look into track.py for more info or see "main" section below in this script to see simple example)
 
         """
+        start_time = time.time()
 
+        
         if embeds is None:
             if self.embedder is None:
                 raise Exception(
@@ -189,6 +190,8 @@ class DeepSort(object):
                 raise Exception("either embeddings or frame must be given!")
 
         assert isinstance(raw_detections,Iterable)
+        
+        start_time_detections = time.time()
 
         if len(raw_detections) > 0: 
             if not self.polygon:
@@ -213,6 +216,11 @@ class DeepSort(object):
         else: 
             detections = []
 
+        end_time = time.time()
+        execution_time = end_time - start_time_detections
+        print(f"Execution time of the Embedding function: {execution_time * 1000} milliseconds")
+
+        start_time_nms = time.time()
         # Run non-maxima suppression.
         boxes = np.array([d.ltwh for d in detections])
         scores = np.array([d.confidence for d in detections])
@@ -222,10 +230,27 @@ class DeepSort(object):
             # nms_toc = time.perf_counter()
             # logger.debug(f'nms time: {nms_toc-nms_tic}s')
             detections = [detections[i] for i in indices]
+        
+        end_time = time.time()
+        execution_time = end_time - start_time_nms
+        print(f"Execution time of the NMS function:  {execution_time * 1000} milliseconds")
 
         # Update tracker.
+        start_time_predict = time.time()
         self.tracker.predict()
+        end_time = time.time()
+        execution_time = end_time - start_time_predict
+        print(f"Execution time of the Predict function:  {execution_time * 1000} milliseconds")
+
+        start_time_update = time.time()
         self.tracker.update(detections, today=today)
+        end_time = time.time()
+        execution_time = end_time - start_time_update
+        print(f"Execution time of the Update function:  {execution_time * 1000} milliseconds")
+
+        end_time = time.time()
+        execution_time = end_time - start_time
+        print(f"Execution time of the main Update function:  {execution_time * 1000} milliseconds")
 
         return self.tracker.tracks
 
@@ -233,7 +258,10 @@ class DeepSort(object):
         self.tracker._next_id
 
     def generate_embeds(self, frame, raw_dets, instance_masks=None):
+        t0 = time.time()
         crops, cropped_inst_masks = self.crop_bb(frame, raw_dets, instance_masks=instance_masks)
+        print(f"    Time to crop: {(time.time()-t0) * 1000} milliseconds")
+    
         if cropped_inst_masks is not None:
             masked_crops = []
             for crop, mask in zip(crops, cropped_inst_masks):
@@ -243,7 +271,11 @@ class DeepSort(object):
                 masked_crops.append(masked_crop)
             return self.embedder.predict(masked_crops)
         else:
-            return self.embedder.predict(crops)
+            t1 = time.time()
+            x =  self.embedder.predict(crops)
+            print(f"    Time to generet embed: {(time.time()-t1) * 1000} milliseconds")
+            return x
+
 
     def generate_embeds_poly(self, frame, polygons, bounding_rects):
         crops = self.crop_poly_pad_black(frame, polygons, bounding_rects)

@@ -124,17 +124,30 @@ class MobileNetv2_Embedder(object):
         """
         all_feats = []
 
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+
+        start.record()
         preproc_imgs = [self.preprocess(img) for img in np_images]
+        end.record()
+        torch.cuda.synchronize()
+        print(f"        Preprocessing time: {start.elapsed_time(end)} ms")
 
-        for this_batch in batch(preproc_imgs, bs=self.max_batch_size):
-            this_batch = torch.cat(this_batch, dim=0)
-            if self.gpu:
-                this_batch = this_batch.cuda()
-                if self.half:
-                    this_batch = this_batch.half()
-            output = self.model.forward(this_batch)
+        with torch.no_grad():
+            start.record()
+            for this_batch in batch(preproc_imgs, bs=self.max_batch_size):
+                this_batch = torch.cat(this_batch, dim=0)
+                if self.gpu:
+                    this_batch = this_batch.cuda()
+                    print(f"        We are using GPU")
+                    if self.half:
+                        this_batch = this_batch.half()
+                output = self.model.forward(this_batch)
 
-            all_feats.extend(output.cpu().data.numpy())
+                all_feats.extend(output.cpu().data.numpy())
+            end.record()
+            torch.cuda.synchronize()
+            print(f"        Inference time: {start.elapsed_time(end)} ms")
 
         return all_feats
 
