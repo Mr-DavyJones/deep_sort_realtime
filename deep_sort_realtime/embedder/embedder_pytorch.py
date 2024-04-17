@@ -137,7 +137,7 @@ class MobileNetv2_Embedder(object):
                 this_batch = torch.cat(this_batch, dim=0)
                 if self.gpu:
                     this_batch = this_batch.cuda()
-                    print(f"        We are using GPU")
+                    #print(f"        We are using GPU")
                     if self.half:
                         this_batch = this_batch.half()
                 output = self.model.forward(this_batch)

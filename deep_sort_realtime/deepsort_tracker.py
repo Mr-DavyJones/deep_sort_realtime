@@ -232,7 +232,7 @@ class DeepSort(object):
 
         end_time = time.time()
         execution_time = end_time - start_time_detections
-        print(f"Execution time of the Embedding function: {execution_time * 1000} milliseconds")
+        #print(f"Execution time of the Embedding function: {execution_time * 1000} milliseconds")
 
         start_time_nms = time.time()
         # Run non-maxima suppression.
@@ -247,24 +247,24 @@ class DeepSort(object):
         
         end_time = time.time()
         execution_time = end_time - start_time_nms
-        print(f"Execution time of the NMS function:  {execution_time * 1000} milliseconds")
+        #print(f"Execution time of the NMS function:  {execution_time * 1000} milliseconds")
 
         # Update tracker.
         start_time_predict = time.time()
         self.tracker.predict()
         end_time = time.time()
         execution_time = end_time - start_time_predict
-        print(f"Execution time of the Predict function:  {execution_time * 1000} milliseconds")
+        #print(f"Execution time of the Predict function:  {execution_time * 1000} milliseconds")
 
         start_time_update = time.time()
         self.tracker.update(detections, today=today)
         end_time = time.time()
         execution_time = end_time - start_time_update
-        print(f"Execution time of the Update function:  {execution_time * 1000} milliseconds")
+        #print(f"Execution time of the Update function:  {execution_time * 1000} milliseconds")
 
         end_time = time.time()
         execution_time = end_time - start_time
-        print(f"Execution time of the main Update function:  {execution_time * 1000} milliseconds")
+        #print(f"Execution time of the main Update function:  {execution_time * 1000} milliseconds")
 
         return self.tracker.tracks
 
@@ -274,7 +274,7 @@ class DeepSort(object):
     def generate_embeds(self, frame, raw_dets, instance_masks=None):
         t0 = time.time()
         crops, cropped_inst_masks = self.crop_bb_cuda(frame, raw_dets, instance_masks=instance_masks)
-        print(f"    Time to crop: {(time.time()-t0) * 1000} milliseconds")
+        #print(f"    Time to crop: {(time.time()-t0) * 1000} milliseconds")
     
         if cropped_inst_masks is not None:
             masked_crops = []
@@ -287,7 +287,7 @@ class DeepSort(object):
         else:
             t1 = time.time()
             x =  self.embedder.predict(crops)
-            print(f"    Time to generet embed: {(time.time()-t1) * 1000} milliseconds")
+            #print(f"    Time to generet embed: {(time.time()-t1) * 1000} milliseconds")
             return x
 
 
