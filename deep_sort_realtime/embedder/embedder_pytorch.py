@@ -5,9 +5,15 @@ import cv2
 import numpy as np
 import pkg_resources
 import torch
+import torchvision
 from torchvision.transforms import transforms
 
+from torchvision.transforms.functional import to_pil_image
+import time
+
+
 from deep_sort_realtime.embedder.mobilenetv2_bottle import MobileNetV2_bottle
+
 
 logger = logging.getLogger(__name__)
 
@@ -72,10 +78,10 @@ class MobileNetv2_Embedder(object):
         logger.info(f"- max batch size: {self.max_batch_size}")
         logger.info(f"- expects BGR: {self.bgr}")
 
-        zeros = np.zeros((100, 100, 3), dtype=np.uint8)
-        self.predict([zeros])  # warmup
+        #zeros = np.zeros((100, 100, 3), dtype=np.uint8)
+        #self.predict([zeros])  # warmup
 
-    def preprocess(self, np_image):
+    def old_preprocess(self, np_image):
         """
         Preprocessing for embedder network: Flips BGR to RGB, resize, convert to torch tensor, normalise with imagenet mean and variance, reshape. Note: input image yet to be loaded to GPU through tensor.cuda()
 
@@ -108,7 +114,7 @@ class MobileNetv2_Embedder(object):
 
         return input_image
 
-    def predict(self, np_images):
+    def old_predict(self, np_images):
         """
         batch inference
 
@@ -124,17 +130,9 @@ class MobileNetv2_Embedder(object):
         """
         all_feats = []
 
-        start = torch.cuda.Event(enable_timing=True)
-        end = torch.cuda.Event(enable_timing=True)
-
-        start.record()
         preproc_imgs = [self.preprocess(img) for img in np_images]
-        end.record()
-        torch.cuda.synchronize()
-        print(f"        Preprocessing time: {start.elapsed_time(end)} ms")
 
         with torch.no_grad():
-            start.record()
             for this_batch in batch(preproc_imgs, bs=self.max_batch_size):
                 this_batch = torch.cat(this_batch, dim=0)
                 if self.gpu:
@@ -143,14 +141,33 @@ class MobileNetv2_Embedder(object):
                     if self.half:
                         this_batch = this_batch.half()
                 output = self.model.forward(this_batch)
-
                 all_feats.extend(output.cpu().data.numpy())
-            end.record()
-            torch.cuda.synchronize()
-            print(f"        Inference time: {start.elapsed_time(end)} ms")
 
         return all_feats
+    
+    def predict(self, np_images):
+        """
+        batch inference
 
+        Params
+        ------
+        np_images : list of ndarray
+            list of (H x W x C), bgr or rgb according to self.bgr
+
+        Returns
+        ------
+        list of features (np.array with dim = 1280)
+        """
+        # Ensure the model is in evaluation mode.
+        self.model.eval()
+        
+        # Perform inference
+        with torch.no_grad():
+            predictions = self.model.forward(np_images)
+        
+        # Convert predictions to NumPy and return
+        return predictions.cpu().data.numpy()
+        
 
 class TorchReID_Embedder(object):
     """
@@ -243,3 +260,63 @@ class TorchReID_Embedder(object):
         preproc_imgs = [self.preprocess(img) for img in np_images]
         output =  self.model(preproc_imgs)
         return output.cpu().data.numpy()
+    
+class MobileNetv3_Embedder(object):
+    """
+    MobileNetv3_Embedder loads a Mobilenetv3 pretrained on Imagenet1000, with classification layer removed, exposing the bottleneck layer, outputing a feature of size 1280.
+
+    Params
+    ------
+    - model_wts_path (optional, str) : path to mobilenetv2 model weights, defaults to the model file in ./mobilenetv2
+    - half (optional, Bool) : boolean flag to use half precision or not, defaults to True
+    - max_batch_size (optional, int) : max batch size for embedder, defaults to 16
+    - bgr (optional, Bool) : boolean flag indicating if input frames are bgr or not, defaults to True
+    - gpu (optional, Bool) : boolean flag indicating if gpu is enabled or not
+    """
+
+    def __init__(
+        self, half=True, bgr=True, gpu=True):
+
+        self.model = torchvision.models.mobilenet_v3_small(pretrained=True)
+        self.model.classifier = self.model.classifier[0] # removes the last layer
+
+        self.gpu = gpu and torch.cuda.is_available()
+        if self.gpu:
+            self.model.cuda()  # loads model to gpu
+            self.half = half
+            if self.half:
+                self.model.half()
+        else:
+            self.half = False
+
+        self.model.eval()  # inference mode, deactivates dropout layers
+
+        self.bgr = bgr
+
+        logger.info("MobileNetV3 Embedder for Deep Sort initialised")
+        logger.info(f"- gpu enabled: {self.gpu}")
+        logger.info(f"- half precision: {self.half}")
+        logger.info(f"- expects BGR: {self.bgr}")
+
+    def predict(self, np_images):
+        """
+        batch inference
+
+        Params
+        ------
+        np_images : list of ndarray
+            list of (H x W x C), bgr or rgb according to self.bgr
+
+        Returns
+        ------
+        list of features (np.array with dim = 1280)
+        """
+        # Ensure the model is in evaluation mode.
+        self.model.eval()
+        
+        # Perform inference
+        with torch.no_grad():
+            predictions = self.model.forward(np_images)
+        
+        # Convert predictions to NumPy and return
+        return predictions.cpu().data.numpy()

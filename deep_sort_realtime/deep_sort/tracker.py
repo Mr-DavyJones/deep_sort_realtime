@@ -138,10 +138,16 @@ class Tracker:
             return cost_matrix
 
         # Split track set into confirmed and unconfirmed tracks.
-        confirmed_tracks = [i for i, t in enumerate(self.tracks) if t.is_confirmed()]
-        unconfirmed_tracks = [
-            i for i, t in enumerate(self.tracks) if not t.is_confirmed()
-        ]
+        confirmed_tracks = []
+        unconfirmed_tracks = []
+        for i,t in enumerate(self.tracks):
+            if t.is_confirmed():
+                confirmed_tracks.append(i)
+            else:
+                unconfirmed_tracks.append(i)
+        
+        #confirmed_tracks = [i for i, t in enumerate(self.tracks) if t.is_confirmed()]
+        #unconfirmed_tracks = [i for i, t in enumerate(self.tracks) if not t.is_confirmed()]
 
         # Associate confirmed tracks using appearance features.
         (

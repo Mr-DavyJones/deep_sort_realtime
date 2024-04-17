@@ -10,10 +10,14 @@ from deep_sort_realtime.deep_sort.detection import Detection
 from deep_sort_realtime.deep_sort.tracker import Tracker
 from deep_sort_realtime.utils.nms import non_max_suppression
 
+import torchvision
+import torch
+
 logger = logging.getLogger(__name__)
 
 EMBEDDER_CHOICES = [
     "mobilenet",
+    "mobilenetv3",
     "torchreid",
     "clip_RN50",
     "clip_RN101",
@@ -111,6 +115,16 @@ class DeepSort(object):
                     bgr=bgr,
                     gpu=embedder_gpu,
                     model_wts_path=embedder_wts,
+                )
+            elif embedder == "mobilenetv3":
+                from deep_sort_realtime.embedder.embedder_pytorch import (
+                    MobileNetv3_Embedder as Embedder,
+                )
+
+                self.embedder = Embedder(
+                    half=half,
+                    bgr=bgr,
+                    gpu=embedder_gpu,
                 )
             elif embedder == 'torchreid':
                 from deep_sort_realtime.embedder.embedder_pytorch import TorchReID_Embedder as Embedder
@@ -259,7 +273,7 @@ class DeepSort(object):
 
     def generate_embeds(self, frame, raw_dets, instance_masks=None):
         t0 = time.time()
-        crops, cropped_inst_masks = self.crop_bb(frame, raw_dets, instance_masks=instance_masks)
+        crops, cropped_inst_masks = self.crop_bb_cuda(frame, raw_dets, instance_masks=instance_masks)
         print(f"    Time to crop: {(time.time()-t0) * 1000} milliseconds")
     
         if cropped_inst_masks is not None:
@@ -340,6 +354,35 @@ class DeepSort(object):
             if instance_masks is not None: 
                 masks.append( instance_masks[i][crop_t:crop_b, crop_l:crop_r] )
         
+        return crops, masks
+    
+    @staticmethod
+    def crop_bb_cuda(frame, raw_dets, instance_masks=None):
+        """
+        Crops the frame using the bounding boxes and returns the crops as a torch tensor on the GPU.
+
+        Parameters
+        ----------
+        frame : torch.float16 tensor
+            shape: [B, C, H, W]
+            The frame to be cropped
+        """
+        crops = torch.empty((len(raw_dets), 3, 224, 224), dtype=torch.float16, device='cuda')
+        im_height, im_width = frame.shape[2:]
+        # transform = torchvision.transforms.Compose([
+        #     torchvision.transforms.Resize((224, 224), antialias=True),
+        #     torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], # ImageNet normalization
+        #                         std=[0.229, 0.224, 0.225])
+        # ])
+
+        if instance_masks is not None: 
+            masks = []
+        else:
+            masks = None
+        for i, detection in enumerate(raw_dets):
+            l, t, w, h = [int(x) for x in detection[0]]
+            tmp_crop = torchvision.transforms.functional.crop(frame, t, l, h, w)
+            #crops[i] = transform(tmp_crop)
         return crops, masks
 
     @staticmethod
