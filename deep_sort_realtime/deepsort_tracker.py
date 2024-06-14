@@ -352,8 +352,8 @@ class DeepSort(object):
             masks = None
         for i, detection in enumerate(raw_dets):
             l, t, w, h = [int(x) for x in detection[0]]
-            tmp_crop = torchvision.transforms.functional.crop(frame, t, l, h, w)
-            #crops[i] = transform(tmp_crop)
+            tmp_crop = torchvision.transforms.functional.resize(torchvision.transforms.functional.crop(frame, t, l, h, w), (224, 224), antialias=True)
+            crops[i] = tmp_crop
         return crops, masks
 
     @staticmethod
